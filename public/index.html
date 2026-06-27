@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Ledger — Trading Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0b0e14;color:#e7ebf3;font-family:'IBM Plex Sans',system-ui,sans-serif}
+  #app-frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:none;background:#0b0e14}
+  .gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:radial-gradient(1200px 600px at 50% -10%, rgba(124,131,255,0.13), transparent 60%), #0b0e14}
+  .card{width:390px;max-width:100%;background:#0f131c;border:1px solid rgba(255,255,255,0.08);border-radius:18px;padding:32px}
+  .logo{width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,#7c83ff,#21c08b);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 18px}
+  h1{font-size:21px;margin:0 0 6px;font-weight:600;text-align:center}
+  .sub{font-size:13px;color:#7c869b;margin:0 0 22px;line-height:1.55;text-align:center}
+  .btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px 16px;border-radius:11px;
+    background:#7c83ff;color:#0b0e14;border:none;font-family:'IBM Plex Sans';font-weight:600;font-size:14px;cursor:pointer;transition:filter .15s}
+  .btn:hover{filter:brightness(1.07)}
+  .btn.secondary{background:#141a25;color:#e7ebf3;border:1px solid rgba(255,255,255,0.08)}
+  .hint{font-size:11.5px;color:#5d6678;margin-top:18px;line-height:1.5;text-align:center}
+  .email{font-family:'IBM Plex Mono';font-size:13px;color:#aab0ff;background:#141a25;border:1px solid rgba(255,255,255,0.07);
+    border-radius:9px;padding:10px 12px;margin:16px 0;word-break:break-all;text-align:center}
+  .spinner{width:26px;height:26px;border:3px solid rgba(255,255,255,0.15);border-top-color:#7c83ff;border-radius:50%;
+    margin:8px auto;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .err{color:#f3576b;font-size:12px;margin-top:12px;min-height:16px;text-align:center}
+  code{font-family:'IBM Plex Mono';background:#141a25;padding:2px 6px;border-radius:5px;font-size:12px;color:#c7cede}
+  .hidden{display:none!important}
+  ol{margin:0;padding-left:18px}
+  ol li{font-size:12.5px;color:#9aa3b6;margin-bottom:9px;line-height:1.5}
+  .gicon{width:18px;height:18px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Sans';font-weight:700;font-size:12px;color:#7c83ff}
+</style>
+</head>
+<body>
+  <div class="gate" id="gate">
+    <div class="card">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 24 24">
+          <rect x="7" y="9" width="3" height="11" rx="1" fill="#0b0e14"/>
+          <rect x="7.7" y="5" width="1.6" height="16" rx="0.8" fill="#0b0e14"/>
+          <rect x="14" y="7" width="3" height="9" rx="1" fill="#0b0e14"/>
+          <rect x="14.7" y="4.5" width="1.6" height="14" rx="0.8" fill="#0b0e14"/>
+        </svg>
+      </div>
+
+      <div id="s-loading">
+        <div class="spinner"></div>
+        <p class="sub" style="margin-top:16px">Checking access…</p>
+      </div>
+
+      <div id="s-login" class="hidden">
+        <h1>Ledger</h1>
+        <p class="sub">Private trading journal.<br/>Sign in to continue — access is invite-only.</p>
+        <button class="btn" id="btn-google"><span class="gicon">G</span>Continue with Google</button>
+        <div class="err" id="login-err"></div>
+        <p class="hint">Only email addresses approved by the owner can sign in.</p>
+      </div>
+
+      <div id="s-denied" class="hidden">
+        <h1>Access restricted</h1>
+        <p class="sub">This account isn't on the allowlist for this journal.</p>
+        <div class="email" id="denied-email"></div>
+        <button class="btn secondary" id="btn-signout">Use a different account</button>
+        <p class="hint">Ask the owner to add your email to grant access.</p>
+      </div>
+
+      <div id="s-setup" class="hidden">
+        <h1>Finish setup</h1>
+        <p class="sub">A couple of steps left before sign-in works.</p>
+        <ol>
+          <li>In the Firebase console, enable <strong>Google</strong> sign-in (Authentication → Sign-in method).</li>
+          <li>Create a <strong>Firestore</strong> database and publish <code>firestore.rules</code>.</li>
+          <li>Add your email to the <code>allowlist</code> collection.</li>
+          <li>Add this site's domain under Authentication → Settings → Authorized domains.</li>
+        </ol>
+        <p class="hint">Full walkthrough is in <code>README.md</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <iframe id="app-frame" title="Ledger Trading Journal" allow="clipboard-write"></iframe>
+
+  <script type="module">
+    import { firebaseConfig } from './firebase-config.js';
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence }
+      from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { getFirestore, doc, getDoc, setDoc }
+      from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+    const screens = ['s-loading','s-login','s-denied','s-setup'];
+    const show = (id) => screens.forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+    const gate = document.getElementById('gate');
+    const frame = document.getElementById('app-frame');
+
+    if (!firebaseConfig || !firebaseConfig.apiKey || String(firebaseConfig.apiKey).startsWith('YOUR_')) {
+      show('s-setup');
+    } else {
+      const app  = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db   = getFirestore(app);
+      let uid = null;
+
+      setPersistence(auth, browserLocalPersistence).catch(() => {});
+
+      document.getElementById('btn-google').addEventListener('click', async () => {
+        document.getElementById('login-err').textContent = '';
+        try {
+          await signInWithPopup(auth, new GoogleAuthProvider());
+        } catch (e) {
+          if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+            document.getElementById('login-err').textContent = e.message || String(e);
+          }
+        }
+      });
+      document.getElementById('btn-signout').addEventListener('click', () => signOut(auth));
+
+      async function isAllowed(email) {
+        try {
+          const snap = await getDoc(doc(db, 'allowlist', (email || '').toLowerCase()));
+          return snap.exists();
+        } catch (e) { console.warn('allowlist check failed:', e); return false; }
+      }
+
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          uid = null; frame.style.display = 'none'; frame.src = 'about:blank';
+          gate.style.display = 'flex'; show('s-login'); return;
+        }
+        gate.style.display = 'flex'; frame.style.display = 'none'; show('s-loading');
+        const ok = await isAllowed(user.email);
+        if (!ok) { document.getElementById('denied-email').textContent = user.email; show('s-denied'); return; }
+        uid = user.uid;
+        frame.src = 'app.html';
+        frame.style.display = 'block';
+        gate.style.display = 'none';
+        frame.onload = () => frame.contentWindow.postMessage({ source: 'host', type: 'user', email: user.email }, location.origin);
+      });
+
+      // Bridge: sync journal entries between the app iframe and Firestore (per user).
+      window.addEventListener('message', async (ev) => {
+        const m = ev.data || {};
+        if (m.source !== 'ledger' || !uid) return;
+        if (m.type === 'journalRequest') {
+          try {
+            const snap = await getDoc(doc(db, 'users', uid));
+            const journals = (snap.exists() && snap.data().journals) || {};
+            ev.source.postMessage({ source: 'host', type: 'journalData', journals }, location.origin);
+          } catch (e) { console.warn('load failed:', e); }
+        } else if (m.type === 'journalSave') {
+          try {
+            await setDoc(doc(db, 'users', uid), { journals: { [m.key]: m.entry } }, { merge: true });
+          } catch (e) { console.warn('save failed:', e); }
+        } else if (m.type === 'signOut') {
+          signOut(auth);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

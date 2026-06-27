@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- helpers ---------------------------------------------------------
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+    // lowercased email of the signed-in user (allowlist doc ids are lowercase)
+    function emailKey() {
+      return request.auth.token.email.lower();
+    }
+    // true only if the user's email exists in the allowlist collection
+    function isAllowed() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/allowlist/$(emailKey()));
+    }
+
+    // --- allowlist -------------------------------------------------------
+    // One doc per approved email. Doc id MUST be the lowercase email address.
+    // Managed from the Firebase console (or scripts/allow.mjs). Never client-writable.
+    match /allowlist/{email} {
+      allow read:  if signedIn() && emailKey() == email; // a user may check only their own status
+      allow write: if false;
+    }
+
+    // --- private user data (journal entries) -----------------------------
+    // Readable/writable ONLY by the owner, and ONLY if their email is allowlisted.
+    match /users/{uid}/{document=**} {
+      allow read, write: if isAllowed() && request.auth.uid == uid;
+    }
+
+    // --- everything else is locked --------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
