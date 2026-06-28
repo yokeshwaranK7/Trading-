@@ -5,7 +5,7 @@
 // (only emails you add to the "allowlist" collection can read or write anything).
 export const firebaseConfig = {
   apiKey: "AIzaSyAwDrtOBFmZNp9f84b3jFmjuWEv3XeXEHo",
-  authDomain: "trading-journal-c8bd6.firebaseapp.com",
+  authDomain: "https://trading-journal-c8bd6-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "trading-journal-c8bd6",
   storageBucket: "trading-journal-c8bd6.firebasestorage.app",
   messagingSenderId: "760546154367",
