@@ -9,11 +9,11 @@ Access is **invite-only**: you grant access by email address, and **no one else 
 ## How access control works
 
 1. A visitor signs in with Google.
-2. The app checks the **`allowlist`** collection in Firestore for their email.
-3. If the email isn't there, they see "Access restricted" and **every database read/write is denied by the security rules** (`firestore.rules`).
+2. The app checks the **`allowlist`** node in the Realtime Database for their email (stored as the email with dots replaced by commas, value `true`).
+3. If the email isn't there, they see "Access restricted" and **every database read/write is denied by the security rules** (`database.rules.json`).
 4. Approved users get the app, and their journal entries are saved under `users/{their-uid}` — readable only by them.
 
-Because the block is in the Firestore rules, even someone who pokes at the API directly cannot get the data. The Firebase web keys in `firebase-config.js` are **not secrets** (they only identify the project); your protection is Auth + rules.
+Because the block is in the Realtime Database rules, even someone who pokes at the API directly cannot get the data. The Firebase web keys in `firebase-config.js` are **not secrets** (they only identify the project); your protection is Auth + rules.
 
 ---
 
@@ -24,9 +24,8 @@ Because the block is in the Firestore rules, even someone who pokes at the API d
 ├── public/                  ← what Vercel serves (the website)
 │   ├── index.html           ← login gate (Firebase auth + allowlist check)
 │   ├── app.html             ← the trading-journal app
-│   └── firebase-config.js   ← your Firebase web config (already filled in)
-├── firestore.rules          ← the access rules (the real security)
-├── firestore.indexes.json
+│   └── firebase-config.js   ← your Firebase web config (incl. databaseURL)
+├── database.rules.json      ← the access rules (the real security)
 ├── firebase.json
 ├── .firebaserc              ← points at project "trading-journal-c8bd6"
 ├── vercel.json              ← static-site config for Vercel
@@ -44,20 +43,22 @@ Console: <https://console.firebase.google.com/project/trading-journal-c8bd6>
 ### 1. Enable Google sign-in
 Authentication → **Get started** → Sign-in method → **Google** → Enable → Save.
 
-### 2. Create the Firestore database
-Firestore Database → **Create database** → Start in **production mode** → pick a location → Enable.
+### 2. Create the Realtime Database
+Realtime Database → **Create database** → pick a location → Start in **locked mode** → Enable.
+
+> Note the instance URL shown at the top of the **Data** tab — it must match `databaseURL` in `public/firebase-config.js` (regional databases end in `.firebasedatabase.app`).
 
 ### 3. Publish the security rules
-Either paste the contents of `firestore.rules` into Firestore → **Rules** → **Publish**, **or** use the CLI:
+Either paste the contents of `database.rules.json` into Realtime Database → **Rules** → **Publish**, **or** use the CLI:
 
 ```bash
 npm install                    # installs firebase-tools locally
 npx firebase login
-npm run deploy:rules           # deploys firestore.rules + indexes
+npm run deploy:rules           # deploys database.rules.json
 ```
 
 ### 4. Grant yourself (and others) access
-**Option A — console (quickest):** Firestore → **Start collection** → Collection ID `allowlist` → Document ID = the person's **lowercase email** (e.g. `you@gmail.com`) → add any field (e.g. `added` / `true`) → Save. Repeat per person.
+**Option A — console (quickest):** Realtime Database → **Data** tab → hover the root → **+** → add a child named `allowlist`, then under it add a child whose **key is the person's lowercase email with every `.` replaced by `,`** (e.g. `you@gmail,com`) and whose **value is the boolean `true`** (no quotes). Repeat per person.
 
 **Option B — terminal:** download a service-account key (Project settings → Service accounts → *Generate new private key*), save it as `serviceAccount.json` in this folder, then:
 
@@ -68,7 +69,7 @@ npm run deny  teammate@gmail.com   # revoke
 npm run list-access                # see everyone with access
 ```
 
-> Always use **lowercase** emails. To revoke someone later, delete their doc from `allowlist` (or `npm run deny`).
+> Always use **lowercase** emails, and replace dots with commas in the key. The value must be the boolean `true`, not the string `"true"`. To revoke someone later, delete their child from `allowlist` (or `npm run deny`).
 
 ---
 
@@ -99,6 +100,6 @@ That's it — open the Vercel URL, sign in with an allow-listed Google account, 
 
 ## Notes & limits
 
-- **Journal entries** (your notes + mood per day) persist to Firestore per user. The sample **trades** shown are demo data generated in the app — wire your broker/import next if you want real trades stored too.
+- **Journal entries** (your notes + mood per day) persist to the Realtime Database per user. The sample **trades** shown are demo data generated in the app — wire your broker/import next if you want real trades stored too.
 - Want **email + password** instead of Google? Enable it under Authentication → Sign-in method; the allowlist logic is identical (it keys off the email).
 - The web app loads the Firebase SDK from Google's CDN, so no build/bundler is required.

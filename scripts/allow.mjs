@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Grant / revoke / list trading-journal access by email.
+ * Grant / revoke / list trading-journal access by email (Realtime Database).
  *
  * Setup (one time):
  *   1. Firebase console -> Project settings -> Service accounts -> Generate new private key
@@ -18,9 +18,14 @@
  *   node scripts/allow.mjs list
  */
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getDatabase } from 'firebase-admin/database';
+
+// Realtime Database instance URL — must match public/firebase-config.js.
+const DATABASE_URL = 'https://trading-journal-c8bd6-default-rtdb.asia-southeast1.firebasedatabase.app';
+
+// RTDB keys can't contain ".", "#", "$", "[" or "]" — encode emails (dots -> commas), lowercase.
+const encEmail = (email) => email.toLowerCase().trim().replace(/\./g, ',');
 
 const [cmd, rawEmail] = process.argv.slice(2);
 
@@ -39,29 +44,30 @@ try {
   process.exit(1);
 }
 
-initializeApp({ credential: cert(sa) });
-const db = getFirestore();
-const col = db.collection('allowlist');
+initializeApp({ credential: cert(sa), databaseURL: DATABASE_URL });
+const allowlist = getDatabase().ref('allowlist');
 
 if (cmd === 'list') {
-  const snap = await col.get();
-  if (snap.empty) { console.log('No one has access yet.'); }
-  else {
-    console.log(`\n${snap.size} email(s) with access:`);
-    snap.forEach((d) => console.log('  •', d.id));
+  const snap = await allowlist.get();
+  if (!snap.exists()) {
+    console.log('No one has access yet.');
+  } else {
+    const keys = Object.keys(snap.val());
+    console.log(`\n${keys.length} email(s) with access:`);
+    keys.forEach((k) => console.log('  •', k.replace(/,/g, '.')));
     console.log('');
   }
   process.exit(0);
 }
 
 if (!rawEmail) { console.error('Provide an email address.'); process.exit(1); }
-const email = rawEmail.toLowerCase().trim();
+const key = encEmail(rawEmail);
 
 if (cmd === 'add') {
-  await col.doc(email).set({ addedAt: new Date().toISOString() });
-  console.log(`\u2713 Granted access to ${email}`);
+  await allowlist.child(key).set(true);
+  console.log(`\u2713 Granted access to ${rawEmail.toLowerCase().trim()}`);
 } else {
-  await col.doc(email).delete();
-  console.log(`\u2713 Revoked access for ${email}`);
+  await allowlist.child(key).remove();
+  console.log(`\u2713 Revoked access for ${rawEmail.toLowerCase().trim()}`);
 }
 process.exit(0);

@@ -74,9 +74,9 @@
         <h1>Finish setup</h1>
         <p class="sub">A couple of steps left before sign-in works.</p>
         <ol>
-          <li>In the Firebase console, enable <strong>Google</strong> sign-in (Authentication → Sign-in method).</li>
-          <li>Create a <strong>Firestore</strong> database and publish <code>firestore.rules</code>.</li>
-          <li>Add your email to the <code>allowlist</code> collection.</li>
+          <li>Enable <strong>Google</strong> sign-in (Authentication → Sign-in method).</li>
+          <li>Publish the Realtime Database rules from <code>database.rules.json</code>.</li>
+          <li>Add your email to the <code>allowlist</code> (dots replaced by commas).</li>
           <li>Add this site's domain under Authentication → Settings → Authorized domains.</li>
         </ol>
         <p class="hint">Full walkthrough is in <code>README.md</code>.</p>
@@ -91,20 +91,23 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence }
       from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-    import { getFirestore, doc, getDoc, setDoc }
-      from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { getDatabase, ref, get, set }
+      from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
     const screens = ['s-loading','s-login','s-denied','s-setup'];
     const show = (id) => screens.forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
     const gate = document.getElementById('gate');
     const frame = document.getElementById('app-frame');
 
+    // Realtime Database keys can't contain "." — encode emails (dots -> commas), lowercase.
+    const encEmail = (email) => (email || '').toLowerCase().replace(/\./g, ',');
+
     if (!firebaseConfig || !firebaseConfig.apiKey || String(firebaseConfig.apiKey).startsWith('YOUR_')) {
       show('s-setup');
     } else {
       const app  = initializeApp(firebaseConfig);
       const auth = getAuth(app);
-      const db   = getFirestore(app);
+      const db   = getDatabase(app);
       let uid = null;
 
       setPersistence(auth, browserLocalPersistence).catch(() => {});
@@ -123,8 +126,8 @@
 
       async function isAllowed(email) {
         try {
-          const snap = await getDoc(doc(db, 'allowlist', (email || '').toLowerCase()));
-          return snap.exists();
+          const snap = await get(ref(db, 'allowlist/' + encEmail(email)));
+          return snap.exists() && snap.val() === true;
         } catch (e) { console.warn('allowlist check failed:', e); return false; }
       }
 
@@ -143,19 +146,19 @@
         frame.onload = () => frame.contentWindow.postMessage({ source: 'host', type: 'user', email: user.email }, location.origin);
       });
 
-      // Bridge: sync journal entries between the app iframe and Firestore (per user).
+      // Bridge: sync journal entries between the app iframe and Realtime Database (per user).
       window.addEventListener('message', async (ev) => {
         const m = ev.data || {};
         if (m.source !== 'ledger' || !uid) return;
         if (m.type === 'journalRequest') {
           try {
-            const snap = await getDoc(doc(db, 'users', uid));
-            const journals = (snap.exists() && snap.data().journals) || {};
+            const snap = await get(ref(db, 'users/' + uid + '/journals'));
+            const journals = snap.exists() ? snap.val() : {};
             ev.source.postMessage({ source: 'host', type: 'journalData', journals }, location.origin);
           } catch (e) { console.warn('load failed:', e); }
         } else if (m.type === 'journalSave') {
           try {
-            await setDoc(doc(db, 'users', uid), { journals: { [m.key]: m.entry } }, { merge: true });
+            await set(ref(db, 'users/' + uid + '/journals/' + m.key), m.entry);
           } catch (e) { console.warn('save failed:', e); }
         } else if (m.type === 'signOut') {
           signOut(auth);
