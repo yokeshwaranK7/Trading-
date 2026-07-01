@@ -160,6 +160,26 @@
           try {
             await set(ref(db, 'users/' + uid + '/journals/' + m.key), m.entry);
           } catch (e) { console.warn('save failed:', e); }
+        } else if (m.type === 'tradesRequest') {
+          try {
+            const snap = await get(ref(db, 'users/' + uid + '/trades'));
+            const data = snap.exists() ? snap.val() : {};
+            ev.source.postMessage({ source: 'host', type: 'tradesData', trades: data.trades || [], deleted: data.deleted || [] }, location.origin);
+          } catch (e) { console.warn('trades load failed:', e); }
+        } else if (m.type === 'tradesSave') {
+          try {
+            await set(ref(db, 'users/' + uid + '/trades'), { trades: m.trades || [], deleted: m.deleted || [] });
+          } catch (e) { console.warn('trades save failed:', e); }
+        } else if (m.type === 'slotsRequest') {
+          try {
+            const snap = await get(ref(db, 'users/' + uid + '/slots'));
+            const slots = snap.exists() ? snap.val() : {};
+            ev.source.postMessage({ source: 'host', type: 'slotsData', slots }, location.origin);
+          } catch (e) { console.warn('slots load failed:', e); }
+        } else if (m.type === 'slotsSave') {
+          try {
+            await set(ref(db, 'users/' + uid + '/slots'), m.slots || {});
+          } catch (e) { console.warn('slots save failed:', e); }
         } else if (m.type === 'signOut') {
           signOut(auth);
         }
